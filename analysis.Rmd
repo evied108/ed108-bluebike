@@ -1,0 +1,144 @@
+---
+title: "HW8"
+author: "Evie deVos"
+date: "2025-04-03"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(usdm)
+library("tree")
+library("randomForest")
+library(ggplot2)
+library(ggcorrplot)
+```
+
+### Research Question:
+Is there any correlation between the number of Bluebike rides and their average duration and the number of MBTA rides in a sample of Bluebike and MBTA rides from July 2018-January 2025? Additionally, does the introduction of the Bluebike subsidy program in October of 2023 affect the amount of Bluebike rides taken?
+
+In this case, our response variable of interest will be the number of Bluebike rides taken. 
+
+```{r data}
+data <- read.csv('merged_mbta_bluebike.csv')
+data$month_of_service <- as.Date(data$month_of_service)
+```
+
+However, before we opt to fit a model, let's first check for the presence of severe multicolinearity issues in the dataset using the vifstep() function.
+
+``` {r vif}
+X <- data[,-c(1, 6)]
+vifstep(X, th=10)
+```
+
+The VIF indicates that the number of riders for the red, orange, and green lines are highly correlated. While we could use a PCA, penalized regression model, or a regression tree to minimize the impact of the multicollinearity, we may not need to do this if we do not believe that all of the variables provide value to the dataset. 
+
+The red, orange, and green lines may be correlated if they represent similar routes - ex: if an area gets higher traffic, all lines will be affected. Instead of performing PCA, lasso/ridge regression, or making a tree, we can try adding the total ridership across the lines and seeing the resulting VIF score.
+
+``` {r vif 2}
+data$total_line_riders <- data$blue_line_riders + data$red_line_riders + data$orange_line_riders + data$green_line_riders
+
+data_total <- data[, -c(2:5)]
+X_total <- data_total[, - c(1:2)]
+```
+
+If we combine the data into one variable, we no longer see any evidence of multicollinearity. Now we can move on to identifying a model. To compare the models we create against one another, we can first split the data into a training and a testing set.
+``` {r train}
+set.seed(10)
+id.train = sample(x=78, size=60)
+data.total.train = data_total[id.train,]
+data.total.test = data_total[-id.train,]
+
+data.train = data[id.train,]
+data.test = data[-id.train,]
+```
+
+Now, let's start out with a simple linear model fitted on the training set:
+``` {r model}
+fit <- lm(bluebike_riders~., data=data.total.train[,-c(1)])
+summary(fit)
+```
+
+From the summary output above, we can see that the average length of bluebike rides, the given year, and the total number of riders on the MBTA lines are significant predictors of the number of total Bluebike riders. We can confirm against the AIC and BIC based models to determine whether these predictors are significant using those criterion:
+``` {r step}
+AIC.fit <- step(fit, trace=0, k=2)
+BIC.fit <- step(fit, trace=0, k=log(nrow(data_total)))
+
+AIC.fit
+BIC.fit
+```
+The AIC and BIC models both exclude bluebike_subsidy as a predictor, which was also deemed insignificant by the full model. This indicates that the subsidy did not significantly impact the ridership of the Bluebikes.
+
+However, this only takes into account the line riders as a whole, and not the individual lines. To check the relationship between the Bluebike ridership and the line riderships without introducing multicollinearity issues, we can run a run a regression tree.
+``` {r tree}
+default.tree <- tree(bluebike_riders~., data=data.train[, -c(1)])
+
+plot(default.tree)
+text(default.tree, pretty=0, cex=0.6)
+```
+Above is our initial Bluebike ridership regression tree. Let's check to see if the tree's current number of terminal nodes matches with optimal number of nodes that minimizes the mean squared error as determined by the cv.tree function. 
+
+``` {r tree 2}
+set.seed(77)
+result = cv.tree(default.tree, K=10, FUN=prune.tree)
+plot(result)
+```
+The plot above suggests that the lowest deviance occurs when there are three terminal nodes used in the tree. We can realize such a tree by using the function prune.tree:
+
+``` {r tree 3}
+tree.new <- prune.tree(default.tree, best=7)
+
+plot(tree.new)
+text(tree.new, pretty=0)
+
+summary(tree.new)
+```
+Neither the full tree nor the pruned tree used bluebike_subsidy as a predictor, indicating that the presence of the bluebike subsidy was not a significant predictor as to the number of bluebike riders within a given month. The pruned tree above uses the year, the average bluebike length, and the number of blue line and green line riders in the tree's construction, suggesting that the number of riders in the green and blue lines may have the most significant relationship with the number of bluebike riders compared to the other lines.
+
+Having made both models, we can compare their performances against each other using our testing set.
+``` {r predicts}
+predict.lin <- predict(fit, newdata=data.total.test[,-c(1)])
+mse.lin <- mean((predict.lin - data.total.test$bluebike_riders)^2)
+rmse.lin <- sqrt(mse.lin)
+
+predict.tree <- predict(tree.new, newdata=data.test[,-c(1)], type="vector")
+mse.tree <- mean((predict.tree - data.test$bluebike_riders)^2)
+rmse.tree <- sqrt(mse.tree)
+
+rmse.lin
+rmse.tree
+
+```
+We can compare both models by using the RMSE as our metric, which measures how far the predicted models are from the actual models using the given model. We can see that the linear model gave us a lower RMSE, indicating that the linear model (which only incorporates the total ridership) offers better predictions than the regression tree.
+
+Attempting random forest plot:
+``` {r random forest}
+set.seed(123)
+fit.RF <- randomForest(bluebike_riders~.,data=data.train[,-c(1)],ntree=100,mtry=4, importance=TRUE)
+Yhat.RF <- predict(fit.RF,newdata=data.test[,-c(1)],type="class")
+
+#misclassification rate
+sum(Yhat.RF!=data.test[,5])/30
+varImpPlot(fit.RF, main="Variable Importance Plot")
+```
+## Visualizations
+### Correlation plot
+``` {r corplot}
+cor_matrix <- cor(data[,-c(1)])
+
+ggcorrplot(cor_matrix, 
+           hc.order = TRUE,
+           type = "lower",
+           lab = TRUE,
+           title="Correlation Matrix",
+           colors = c("#63a46c", "#e9ebe8", "#4f7cac")) 
+```
+
+## Line plot
+
+``` {r line}
+plot(x=data$month_of_service, y=data$bluebike_riders, type="l", col="#4f7cac",
+     xlab="Year", ylab="Average Number of Riders")
+```
