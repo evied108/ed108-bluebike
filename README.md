@@ -7,7 +7,7 @@ Secondary question: Does the introduction of the Bluebike subsidy program in Oct
 Navigate to the file **cleaning.ipynb** to see the data cleaning steps that were taken. 
 Final clean dataset is **''merged_mbta_bluebike.csv.'** 
 
-### Data analysis
+### Data analysis and additional visualizations
 Data analysis performed in the file **analysis.Rmd**.
 
 
