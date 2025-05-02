@@ -120,7 +120,7 @@ fit.RF <- randomForest(bluebike_riders~.,data=data.train[,-c(1)],ntree=100,mtry=
 Yhat.RF <- predict(fit.RF,newdata=data.test[,-c(1)],type="class")
 
 #misclassification rate
-sum(Yhat.RF!=data.test[,5])/30
+sum(Yhat.RF!=data.test[,6])/18
 varImpPlot(fit.RF, main="Variable Importance Plot")
 ```
 ## Visualizations
