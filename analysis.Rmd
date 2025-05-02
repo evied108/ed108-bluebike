@@ -81,11 +81,11 @@ text(default.tree, pretty=0, cex=0.6)
 Above is our initial Bluebike ridership regression tree. Let's check to see if the tree's current number of terminal nodes matches with optimal number of nodes that minimizes the mean squared error as determined by the cv.tree function. 
 
 ``` {r tree 2}
-set.seed(77)
+set.seed(71)
 result = cv.tree(default.tree, K=10, FUN=prune.tree)
 plot(result)
 ```
-The plot above suggests that the lowest deviance occurs when there are three terminal nodes used in the tree. We can realize such a tree by using the function prune.tree:
+The plot above suggests that the lowest deviance occurs when there are seven terminal nodes used in the tree. We can realize such a tree by using the function prune.tree:
 
 ``` {r tree 3}
 tree.new <- prune.tree(default.tree, best=7)
@@ -97,8 +97,9 @@ summary(tree.new)
 ```
 Neither the full tree nor the pruned tree used bluebike_subsidy as a predictor, indicating that the presence of the bluebike subsidy was not a significant predictor as to the number of bluebike riders within a given month. The pruned tree above uses the year, the average bluebike length, and the number of blue line and green line riders in the tree's construction, suggesting that the number of riders in the green and blue lines may have the most significant relationship with the number of bluebike riders compared to the other lines.
 
-Having made both models, we can compare their performances against each other using our testing set.
+Having made both models, we can compare their performances on the testing set and calculate their RMSEs.
 ``` {r predicts}
+
 predict.lin <- predict(fit, newdata=data.total.test[,-c(1)])
 mse.lin <- mean((predict.lin - data.total.test$bluebike_riders)^2)
 rmse.lin <- sqrt(mse.lin)
@@ -113,16 +114,20 @@ rmse.tree
 ```
 We can compare both models by using the RMSE as our metric, which measures how far the predicted models are from the actual models using the given model. We can see that the linear model gave us a lower RMSE, indicating that the linear model (which only incorporates the total ridership) offers better predictions than the regression tree.
 
-Attempting random forest plot:
+Attempting random forest plot and comparing RMSE:
 ``` {r random forest}
 set.seed(123)
 fit.RF <- randomForest(bluebike_riders~.,data=data.train[,-c(1)],ntree=100,mtry=4, importance=TRUE)
-Yhat.RF <- predict(fit.RF,newdata=data.test[,-c(1)],type="class")
 
-#misclassification rate
-sum(Yhat.RF!=data.test[,6])/18
-varImpPlot(fit.RF, main="Variable Importance Plot")
+
+preds <- predict(fit.RF, newdata = data.test[,-1])
+errors <- preds - data.test$bluebike_riders
+rmse.forest <- sqrt(mean(errors^2))
+
+rmse.forest
 ```
+
+
 ## Visualizations
 ### Correlation plot
 ``` {r corplot}
